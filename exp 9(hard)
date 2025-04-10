@@ -1,0 +1,109 @@
+1. Account.java
+@Entity
+public class Account {
+    @Id
+    private Long id;
+
+    private String name;
+    private double balance;
+
+    // Getters and setters
+}
+
+2.Transaction.java
+@Entity
+public class Transaction {
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private Long fromAccountId;
+    private Long toAccountId;
+    private double amount;
+
+    private String status;
+
+    // Getters and setters
+}
+
+3.Hibernate Config (hibernate.cfg.xml)
+<hibernate-configuration>
+  <session-factory>
+    <property name="hibernate.dialect">org.hibernate.dialect.MySQLDialect</property>
+    <property name="hibernate.connection.driver_class">com.mysql.cj.jdbc.Driver</property>
+    <property name="hibernate.connection.url">jdbc:mysql://localhost:3306/bankdb</property>
+    <property name="hibernate.connection.username">root</property>
+    <property name="hibernate.connection.password">root</property>
+    <property name="hibernate.hbm2ddl.auto">update</property>
+    <property name="show_sql">true</property>
+    
+    <mapping class="com.example.Account"/>
+    <mapping class="com.example.Transaction"/>
+  </session-factory>
+</hibernate-configuration>
+
+
+4. Spring Config (AppConfig.java)
+@Configuration
+@EnableTransactionManagement
+@ComponentScan(basePackages = "com.example")
+public class AppConfig {
+
+    @Bean
+    public SessionFactory sessionFactory() {
+        return new Configuration().configure().buildSessionFactory();
+    }
+
+    @Bean
+    public PlatformTransactionManager transactionManager(SessionFactory sessionFactory) {
+        return new HibernateTransactionManager(sessionFactory);
+    }
+}
+
+5. BankService.java
+@Service
+public class BankService {
+
+    @Autowired
+    private SessionFactory sessionFactory;
+
+    @Transactional
+    public void transferMoney(Long fromId, Long toId, double amount) {
+        Session session = sessionFactory.getCurrentSession();
+
+        Account from = session.get(Account.class, fromId);
+        Account to = session.get(Account.class, toId);
+
+        if (from.getBalance() < amount) {
+            throw new RuntimeException("Insufficient funds");
+        }
+
+        from.setBalance(from.getBalance() - amount);
+        to.setBalance(to.getBalance() + amount);
+
+        Transaction tx = new Transaction();
+        tx.setFromAccountId(fromId);
+        tx.setToAccountId(toId);
+        tx.setAmount(amount);
+        tx.setStatus("SUCCESS");
+
+        session.save(tx);
+    }
+}
+
+6. Test Main Class
+public class MainApp {
+    public static void main(String[] args) {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        BankService bankService = context.getBean(BankService.class);
+
+        try {
+            bankService.transferMoney(1L, 2L, 500.00);
+            System.out.println("Transaction successful.");
+        } catch (Exception e) {
+            System.out.println("Transaction failed: " + e.getMessage());
+        }
+
+        context.close();
+    }
+}
